@@ -6,6 +6,7 @@ class Note(models.Model):
     owner = models.ForeignKey(User)
     title = models.TextField()
     text = models.TextField()
+    published = models.BooleanField(True)
 
     def get_absolute_url(self):
         return reverse('usernotes-detail', kwargs={'pk': self.pk})
