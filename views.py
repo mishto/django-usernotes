@@ -27,7 +27,9 @@ class NoteListUserView(ListView):
     model = Note
 
     def dispatch(self, request, *args, **kwargs):
-        self.queryset = Note.objects.filter(owner = request.user)
+        self.queryset = Note.objects.filter(owner = kwargs["user_id"])
+        if kwargs["user_id"] != request.user.id:
+            self.queryset = self.queryset.filter(published = True)
         return super(ListView, self).dispatch(request, *args, **kwargs)
 
 class NoteCreateView(CreateView):
