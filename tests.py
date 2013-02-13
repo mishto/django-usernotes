@@ -83,10 +83,10 @@ class TestNotesViews(TransactionTestCase):
         self.assertEqual(counter, 0)
 
     def testCannotUpdateNoteOfDifferentUser(self):
-        self.login()
+        user = self.login()
         other_user = self.createUser(username="other")
         note = self.createNote(other_user)
-        self.newNoteData["owner"] = other_user.id
+        self.newNoteData["owner"] = user.id
         self.c.post(reverse("usernotes-update", kwargs = {'pk': note.id}), data=self.newNoteData)
 
         note = Note.objects.get(id = note.id)

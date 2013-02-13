@@ -1,5 +1,6 @@
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.urlresolvers import reverse
+from django.http import HttpResponseRedirect
 from django.utils.decorators import method_decorator
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, UpdateView, ProcessFormView, ModelFormMixin, FormMixin, BaseUpdateView, DeleteView
@@ -26,10 +27,13 @@ class NoteListView(ListView):
 class NoteListUserView(ListView):
     model = Note
 
+    def get_queryset(self):
+        queryset = Note.objects.filter(owner = self.kwargs["user_id"])
+        if self.kwargs["user_id"] != self.request.user.id:
+            queryset = queryset.filter(published = True)
+        return queryset
+
     def dispatch(self, request, *args, **kwargs):
-        self.queryset = Note.objects.filter(owner = kwargs["user_id"])
-        if kwargs["user_id"] != request.user.id:
-            self.queryset = self.queryset.filter(published = True)
         return super(ListView, self).dispatch(request, *args, **kwargs)
 
 class NoteCreateView(CreateView):
@@ -41,7 +45,7 @@ class NoteCreateView(CreateView):
 
     @method_decorator(owner_is_user_required)
     def post(self, request, *args, **kwargs):
-            return super(CreateView, self).post(request, *args, **kwargs)
+        return super(CreateView, self).post(request, *args, **kwargs)
 
 class NoteDetailView(DetailView):
     model = Note
@@ -57,7 +61,7 @@ class NoteUpdateView(UpdateView):
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         if self.object.owner == request.user :
-            return super(UpdateView, self).post(request, *args, **kwargs)
+            return ProcessFormView.post(self, request, *args, **kwargs)
         else:
             return redirect(reverse("usernotes-list"))
 
@@ -70,8 +74,9 @@ class NoteDeleteView(DeleteView):
         return super(DeleteView, self).dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        if self.object.owner == request.user:
-            return super(DeleteView, self).post(request, *args, **kwargs)
+        object = self.get_object()
+        if object.owner == request.user:
+            object.delete()
+            return HttpResponseRedirect(self.get_success_url())
         else:
             return redirect(reverse("usernotes-list"))
