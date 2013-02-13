@@ -8,8 +8,9 @@ from usernotes.models import Note
 class TestNotesViews(TransactionTestCase):
     def setUp(self):
         self.c = Client()
+        self.unpublishedNoteData = {"owner":0, "title": "basic note title", "text": "basic note text"}
         self.basicNoteData = {"owner":0, "title": "basic note title", "text": "basic note text", "published": True}
-        self.newNoteData = {"owner":0, "title": "new note title", "text": "new note text", "published": True}
+        self.publishedNoteData = {"owner":0, "title": "new note title", "text": "new note text", "published": True}
         self.userData = {"username": "username", "email": "email@test.com", "password": "password"}
 
     def testResponseOKWhenNoNotes(self):
@@ -37,13 +38,13 @@ class TestNotesViews(TransactionTestCase):
     def testNoteUpdate(self):
         user = self.login()
         note = self.createNote(user)
-        self.newNoteData["owner"] = user.id
-        self.newNoteData["pk"] = note.id
-        response = self.c.post(reverse("usernotes-update", kwargs = {"pk": note.id}), data = self.newNoteData)
+        self.publishedNoteData["owner"] = user.id
+        self.publishedNoteData["pk"] = note.id
+        response = self.c.post(reverse("usernotes-update", kwargs = {'pk': note.id}), data = self.publishedNoteData)
 
         self.assertRedirects(response, reverse("usernotes-detail", kwargs={"pk": note.id}))
         note = Note.objects.get(id = note.id)
-        self.assertEqual(note.text, self.newNoteData["text"])
+        self.assertEqual(note.text, self.publishedNoteData["text"])
 
     def testCannotCreateNoteIfNotLoggedIn(self):
         user = self.createUser()
@@ -55,8 +56,8 @@ class TestNotesViews(TransactionTestCase):
     def testCannotUpdateNoteIfNotLoggedIn(self):
         user = self.createUser()
         note = self.createNote(user)
-        self.newNoteData["owner"] = user.id
-        self.c.post(reverse("usernotes-update", kwargs={"pk": note.id}), data = self.newNoteData)
+        self.publishedNoteData["owner"] = user.id
+        self.c.post(reverse("usernotes-update", kwargs={"pk": note.id}), data = self.publishedNoteData)
         note = Note.objects.get(id = note.id)
         self.assertEqual(note.text, self.basicNoteData["text"])
 
@@ -65,9 +66,9 @@ class TestNotesViews(TransactionTestCase):
         user = self.login()
         note = self.createNote(user)
         other_user = self.createUser(username="other")
-        self.newNoteData["owner"] = other_user.id
-        self.newNoteData["pk"] = note.id
-        self.c.post(reverse("usernotes-update", kwargs = {"pk": note.id}), data = self.newNoteData)
+        self.publishedNoteData["owner"] = other_user.id
+        self.publishedNoteData["pk"] = note.id
+        self.c.post(reverse("usernotes-update", kwargs = {"pk": note.id}), data = self.publishedNoteData)
 
         note = Note.objects.get(id = note.id)
         self.assertEqual(note.owner.id, user.id)
@@ -86,8 +87,8 @@ class TestNotesViews(TransactionTestCase):
         user = self.login()
         other_user = self.createUser(username="other")
         note = self.createNote(other_user)
-        self.newNoteData["owner"] = user.id
-        self.c.post(reverse("usernotes-update", kwargs = {'pk': note.id}), data=self.newNoteData)
+        self.publishedNoteData["owner"] = user.id
+        self.c.post(reverse("usernotes-update", kwargs = {'pk': note.id}), data=self.publishedNoteData)
 
         note = Note.objects.get(id = note.id)
         self.assertEqual(note.text, self.basicNoteData["text"])
@@ -117,8 +118,8 @@ class TestNotesViews(TransactionTestCase):
         user = self.createUser()
         note = self.createNote(user)
         other_user = self.createUser(username = "other_user")
-        self.newNoteData["owner"] = other_user
-        other_note = self.createNoteWithData(data = self.newNoteData)
+        self.publishedNoteData["owner"] = other_user
+        other_note = self.createNoteWithData(data = self.publishedNoteData)
 
         response = self.c.get(reverse("usernotes-list-user", kwargs={'user_id': user.id}))
         self.assertIn(note.title, response.content)
@@ -139,9 +140,9 @@ class TestNotesViews(TransactionTestCase):
         self.basicNoteData["published"] = True
         unpublished_note = self.createNoteWithData(self.basicNoteData)
 
-        self.newNoteData["owner"] = user
-        self.newNoteData["published"] = True
-        published_note = self.createNoteWithData(self.newNoteData)
+        self.publishedNoteData["owner"] = user
+        self.publishedNoteData["published"] = True
+        published_note = self.createNoteWithData(self.publishedNoteData)
 
         response = self.c.get(reverse("usernotes-list-user", kwargs={'user_id': user.id}))
         self.assertIn(unpublished_note.title, response.content)
@@ -154,13 +155,51 @@ class TestNotesViews(TransactionTestCase):
         self.basicNoteData["published"] = False
         unpublished_note = self.createNoteWithData(self.basicNoteData)
 
-        self.newNoteData["owner"] = user
-        self.newNoteData["published"] = True
-        published_note = self.createNoteWithData(self.newNoteData)
+        self.publishedNoteData["owner"] = user
+        self.publishedNoteData["published"] = True
+        published_note = self.createNoteWithData(self.publishedNoteData)
 
         response = self.c.get(reverse("usernotes-list-user", kwargs={'user_id': user.id}))
         self.assertNotIn(unpublished_note.title, response.content)
         self.assertIn(published_note.title, response.content)
+
+    def testPublishViewChangesAttributeOnNote(self):
+        user = self.login()
+        self.unpublishedNoteData["owner"] = user
+        note = self.createNoteWithData(self.unpublishedNoteData)
+        self.c.post(reverse("usernotes-publish", kwargs={'pk': note.id}))
+
+        note = Note.objects.get(id = note.id)
+        self.assertTrue(note.published)
+
+    def testUnpublishViewChangesAttributeOnNote(self):
+        user = self.login()
+        self.publishedNoteData["owner"] = user
+        note = self.createNoteWithData(self.publishedNoteData)
+        self.c.post(reverse("usernotes-unpublish", kwargs={'pk': note.id}))
+
+        note = Note.objects.get(id = note.id)
+        self.assertFalse(note.published)
+
+    def testCannotPublishANoteYouDontOwn(self):
+        user = self.login()
+        other = self.createUser(username="other")
+        self.unpublishedNoteData["owner"] = other
+        note = self.createNoteWithData(self.unpublishedNoteData)
+        self.c.post(reverse("usernotes-publish", kwargs={'pk': note.id}))
+
+        note = Note.objects.get(id = note.id)
+        self.assertFalse(note.published)
+
+    def testCannotUnpublishANoteYouDontOwn(self):
+        user = self.login()
+        other = self.createUser(username="other")
+        self.publishedNoteData["owner"] = other
+        note = self.createNoteWithData(self.publishedNoteData)
+        self.c.post(reverse("usernotes-unpublish", kwargs={'pk': note.id}))
+
+        note = Note.objects.get(id = note.id)
+        self.assertTrue(note.published)
 
     def createUser(self, username="username", email = "email@test.com", password="password"):
         return User.objects.create_user(username = username, email = email, password = password)
@@ -173,8 +212,7 @@ class TestNotesViews(TransactionTestCase):
 
     def createNote(self, user):
         self.basicNoteData["owner"] = user
-        note = Note.objects.create(**self.basicNoteData)
-        return note
+        return self.createNoteWithData(self.basicNoteData)
 
     def createNoteWithData(self, data=None):
         note = Note.objects.create(**data)

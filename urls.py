@@ -1,5 +1,6 @@
 from django.conf.urls import url, patterns
-from usernotes.views import NoteListView, NoteDetailView, NoteCreateView, NoteUpdateView, NoteDeleteView, NoteListUserView
+from usernotes.views import NoteListView, NoteDetailView, NoteCreateView, NoteUpdateView
+from usernotes.views import NoteDeleteView, NoteListUserView, NotePublishView, NoteUnpublishView
 
 urlpatterns = patterns('',
                 url(r'^list/$', NoteListView.as_view(), name='usernotes-list'),
@@ -8,5 +9,7 @@ urlpatterns = patterns('',
                 url(r'^detail/(?P<pk>[\d]+)$', NoteDetailView.as_view(), name='usernotes-detail'),
                 url(r'^edit/(?P<pk>[\d]+)$', NoteUpdateView.as_view(), name='usernotes-update'),
                 url(r'^delete/(?P<pk>[\d]+)$', NoteDeleteView.as_view(), name='usernotes-delete'),
+                url(r'^publish/(?P<pk>[\d]+)$', NotePublishView.as_view(), name='usernotes-publish'),
+                url(r'^unpublish/(?P<pk>[\d]+)$', NoteUnpublishView.as_view(), name='usernotes-unpublish'),
             )
 

@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.exceptions import PermissionDenied
 from django.core.urlresolvers import reverse
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, HttpResponseForbidden
 from django.utils.decorators import method_decorator
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, UpdateView, ProcessFormView, ModelFormMixin, FormMixin, BaseUpdateView, DeleteView
@@ -63,7 +64,7 @@ class NoteUpdateView(UpdateView):
         if self.object.owner == request.user :
             return ProcessFormView.post(self, request, *args, **kwargs)
         else:
-            return redirect(reverse("usernotes-list"))
+            return HttpResponseForbidden(self)
 
 class NoteDeleteView(DeleteView):
     model = Note
@@ -79,4 +80,28 @@ class NoteDeleteView(DeleteView):
             object.delete()
             return HttpResponseRedirect(self.get_success_url())
         else:
-            return redirect(reverse("usernotes-list"))
+            return HttpResponseForbidden(self)
+
+class NotePublishView(UpdateView):
+    model = Note
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if self.object.owner == request.user:
+            self.object.published = True
+            self.object.save()
+            return HttpResponseRedirect(self.get_success_url())
+        else:
+            return HttpResponseForbidden(self)
+
+class NoteUnpublishView(UpdateView):
+    model = Note
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if self.object.owner == request.user:
+            self.object.published = False
+            self.object.save()
+            return HttpResponseRedirect(self.get_success_url())
+        else:
+            return HttpResponseForbidden(self)
