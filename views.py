@@ -1,8 +1,11 @@
+from string import split
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import PermissionDenied
 from django.core.urlresolvers import reverse
+from django.db.models.query_utils import Q
 from django.http import HttpResponseRedirect, HttpResponseForbidden
 from django.utils.decorators import method_decorator
+from django.views.generic.base import View
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, UpdateView, ProcessFormView, ModelFormMixin, FormMixin, BaseUpdateView, DeleteView
 from django.views.generic.list import ListView
@@ -30,7 +33,7 @@ class NoteListUserView(ListView):
 
     def get_queryset(self):
         queryset = Note.objects.filter(owner = self.kwargs["user_id"])
-        if self.kwargs["user_id"] != self.request.user.id:
+        if int(self.kwargs["user_id"]) != self.request.user.id:
             queryset = queryset.filter(published = True)
         return queryset
 
@@ -105,3 +108,15 @@ class NoteUnpublishView(UpdateView):
             return HttpResponseRedirect(self.get_success_url())
         else:
             return HttpResponseForbidden(self)
+
+class NoteSearchView(ListView):
+    model = Note
+
+    def get_queryset(self):
+        keywords = split(self.request.GET["keywords"], " ")
+        queryset = Note.objects.filter(published=True)
+        for key in keywords:
+            queryset = queryset.filter(
+                Q(text__icontains=key)
+                | Q(title__icontains=key))
+        return queryset

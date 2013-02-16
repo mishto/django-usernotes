@@ -8,9 +8,9 @@ from usernotes.models import Note
 class TestNotesViews(TransactionTestCase):
     def setUp(self):
         self.c = Client()
-        self.unpublishedNoteData = {"owner":0, "title": "basic note title", "text": "basic note text"}
-        self.basicNoteData = {"owner":0, "title": "basic note title", "text": "basic note text", "published": True}
-        self.publishedNoteData = {"owner":0, "title": "new note title", "text": "new note text", "published": True}
+        self.unpublishedNoteData = {"title": "unpublished note title", "text": "unpublished note text"}
+        self.basicNoteData = {"title": "basic note title", "text": "basic note text", "published": True}
+        self.publishedNoteData = {"title": "published note title", "text": "published note text", "published": True}
         self.userData = {"username": "username", "email": "email@test.com", "password": "password"}
 
     def testResponseOKWhenNoNotes(self):
@@ -38,8 +38,7 @@ class TestNotesViews(TransactionTestCase):
     def testNoteUpdate(self):
         user = self.login()
         note = self.createNote(user)
-        self.publishedNoteData["owner"] = user.id
-        self.publishedNoteData["pk"] = note.id
+        self.publishedNoteData.update({"owner": user.id, "pk": note.id})
         response = self.c.post(reverse("usernotes-update", kwargs = {'pk': note.id}), data = self.publishedNoteData)
 
         self.assertRedirects(response, reverse("usernotes-detail", kwargs={"pk": note.id}))
@@ -66,8 +65,7 @@ class TestNotesViews(TransactionTestCase):
         user = self.login()
         note = self.createNote(user)
         other_user = self.createUser(username="other")
-        self.publishedNoteData["owner"] = other_user.id
-        self.publishedNoteData["pk"] = note.id
+        self.publishedNoteData.update({"owner": other_user.id, "pk": note.id})
         self.c.post(reverse("usernotes-update", kwargs = {"pk": note.id}), data = self.publishedNoteData)
 
         note = Note.objects.get(id = note.id)
@@ -107,9 +105,9 @@ class TestNotesViews(TransactionTestCase):
         self.assertEqual(count, 1)
 
     def testCannotDeleteSomebodyElseSNote(self):
+        self.login()
         other = self.createUser(username="other_user")
         note = self.createNote(other)
-        self.login()
         self.c.post(reverse("usernotes-delete", kwargs={'pk': note.id}))
         count = Note.objects.count()
         self.assertEqual(count, 1)
@@ -118,8 +116,7 @@ class TestNotesViews(TransactionTestCase):
         user = self.createUser()
         note = self.createNote(user)
         other_user = self.createUser(username = "other_user")
-        self.publishedNoteData["owner"] = other_user
-        other_note = self.createNoteWithData(data = self.publishedNoteData)
+        other_note = self.createNote(other_user, self.publishedNoteData)
 
         response = self.c.get(reverse("usernotes-list-user", kwargs={'user_id': user.id}))
         self.assertIn(note.title, response.content)
@@ -127,22 +124,15 @@ class TestNotesViews(TransactionTestCase):
 
     def testListNotesDoesNotDisplayUnpublishedNotes(self):
         user = self.createUser()
-        self.basicNoteData["owner"] = user
-        self.basicNoteData["published"] = False
-        note = self.createNoteWithData(self.basicNoteData)
+        note = self.createNote(user, self.unpublishedNoteData)
 
         response = self.c.get(reverse("usernotes-list"))
         self.assertNotIn(note.title, response.content)
 
     def testListUserNotesDisplaysUnpublishedNotesWhenOwnerIsLoggedIn(self):
         user = self.login()
-        self.basicNoteData["owner"] = user
-        self.basicNoteData["published"] = True
-        unpublished_note = self.createNoteWithData(self.basicNoteData)
-
-        self.publishedNoteData["owner"] = user
-        self.publishedNoteData["published"] = True
-        published_note = self.createNoteWithData(self.publishedNoteData)
+        unpublished_note = self.createNote(user, self.unpublishedNoteData)
+        published_note = self.createNote(user, self.publishedNoteData)
 
         response = self.c.get(reverse("usernotes-list-user", kwargs={'user_id': user.id}))
         self.assertIn(unpublished_note.title, response.content)
@@ -151,13 +141,8 @@ class TestNotesViews(TransactionTestCase):
     def testListUserNotesDoesntDisplaysUnpublishedNotesWhenOwnerIsNotLoggedIn(self):
         self.login()
         user = self.createUser(username="other_user")
-        self.basicNoteData["owner"] = user
-        self.basicNoteData["published"] = False
-        unpublished_note = self.createNoteWithData(self.basicNoteData)
-
-        self.publishedNoteData["owner"] = user
-        self.publishedNoteData["published"] = True
-        published_note = self.createNoteWithData(self.publishedNoteData)
+        unpublished_note = self.createNote(user, self.unpublishedNoteData)
+        published_note = self.createNote(user, self.publishedNoteData)
 
         response = self.c.get(reverse("usernotes-list-user", kwargs={'user_id': user.id}))
         self.assertNotIn(unpublished_note.title, response.content)
@@ -165,8 +150,7 @@ class TestNotesViews(TransactionTestCase):
 
     def testPublishViewChangesAttributeOnNote(self):
         user = self.login()
-        self.unpublishedNoteData["owner"] = user
-        note = self.createNoteWithData(self.unpublishedNoteData)
+        note = self.createNote(user, self.unpublishedNoteData)
         self.c.post(reverse("usernotes-publish", kwargs={'pk': note.id}))
 
         note = Note.objects.get(id = note.id)
@@ -174,32 +158,59 @@ class TestNotesViews(TransactionTestCase):
 
     def testUnpublishViewChangesAttributeOnNote(self):
         user = self.login()
-        self.publishedNoteData["owner"] = user
-        note = self.createNoteWithData(self.publishedNoteData)
+        note = self.createNote(user, self.publishedNoteData)
         self.c.post(reverse("usernotes-unpublish", kwargs={'pk': note.id}))
 
         note = Note.objects.get(id = note.id)
         self.assertFalse(note.published)
 
     def testCannotPublishANoteYouDontOwn(self):
-        user = self.login()
+        self.login()
         other = self.createUser(username="other")
-        self.unpublishedNoteData["owner"] = other
-        note = self.createNoteWithData(self.unpublishedNoteData)
+        note = self.createNote(other, self.unpublishedNoteData)
         self.c.post(reverse("usernotes-publish", kwargs={'pk': note.id}))
 
         note = Note.objects.get(id = note.id)
         self.assertFalse(note.published)
 
-    def testCannotUnpublishANoteYouDontOwn(self):
-        user = self.login()
+    def testCannotUnPublishANoteYouDoNotOwn(self):
+        self.login()
         other = self.createUser(username="other")
-        self.publishedNoteData["owner"] = other
-        note = self.createNoteWithData(self.publishedNoteData)
+        note = self.createNote(other, self.publishedNoteData)
         self.c.post(reverse("usernotes-unpublish", kwargs={'pk': note.id}))
 
         note = Note.objects.get(id = note.id)
         self.assertTrue(note.published)
+
+    def testSearchOnlyDisplaysMatchingNotesOnly(self):
+        user = self.createUser()
+        note = self.createNote(user)
+        otherNote = self.createNote(user, self.publishedNoteData)
+        response = self.c.get(reverse("usernotes-search"), data={"keywords": "basic"})
+
+        self.assertIn(note.title, response.content)
+        self.assertNotIn(otherNote.title, response.content)
+
+    def testSearchMatchesNoteTitles(self):
+        note = self.createNote(self.createUser())
+        response = self.c.get(reverse("usernotes-search"), data={"keywords": "title"})
+
+        self.assertIn(note.title, response.content)
+
+    def testSearchMatchesAllKeywords(self):
+        user = self.createUser()
+        note = self.createNote(user)
+        otherNote = self.createNote(user, self.publishedNoteData)
+        response = self.c.get(reverse("usernotes-search"), data={"keywords": "basic title text"})
+
+        self.assertIn(note.title, response.content)
+        self.assertNotIn(otherNote.title, response.content)
+
+    def testSearchDoesNotListUnpublishedNotes(self):
+        note = self.createNote(self.createUser(), self.unpublishedNoteData)
+        response = self.c.get(reverse("usernotes-search"), data={"keywords": "title"})
+
+        self.assertNotIn(note.title, response.content)
 
     def createUser(self, username="username", email = "email@test.com", password="password"):
         return User.objects.create_user(username = username, email = email, password = password)
@@ -210,13 +221,10 @@ class TestNotesViews(TransactionTestCase):
         self.c.login(username=self.userData["username"], password=self.userData["password"])
         return user
 
-    def createNote(self, user):
-        self.basicNoteData["owner"] = user
-        return self.createNoteWithData(self.basicNoteData)
-
-    def createNoteWithData(self, data=None):
-        note = Note.objects.create(**data)
+    def createNote(self, owner, data=None):
+        if data == None:
+            data = self.basicNoteData
+        note = Note.objects.create(owner = owner, **data)
         return note
-
 
 
